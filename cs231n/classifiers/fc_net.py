@@ -184,6 +184,10 @@ class FullyConnectedNet(object):
         for i, dim in enumerate(hidden_dims + [num_classes]):
             self.params['W%i'%(i+1)] = np.random.randn(prev_dim, dim) * weight_scale
             self.params['b%i'%(i+1)] = np.zeros(dim)
+
+            if self.normalization == 'batchnorm' and i < (self.num_layers - 1):
+                self.params['gamma%i'%(i+1)] = np.ones(dim)
+                self.params['beta%i'%(i+1)] = np.zeros(dim)
             prev_dim = dim
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -246,9 +250,16 @@ class FullyConnectedNet(object):
         inputs = X
         caches = []
         for i in range(self.num_layers - 1):
-            inputs, cache = affine_relu_forward(
-                    inputs, self.params['W%i'%(i+1)], self.params['b%i'%(i+1)])
+            if self.normalization == 'batchnorm':
+                inputs, cache = affine_batchnorm_relu_forward(inputs,
+                        self.params['W%i'%(i+1)], self.params['b%i'%(i+1)],
+                        self.params['gamma%i'%(i+1)], self.params['beta%i'%(i+1)],
+                        self.bn_params[i])
+            else:
+                inputs, cache = affine_relu_forward(
+                        inputs, self.params['W%i'%(i+1)], self.params['b%i'%(i+1)])
             caches.append(cache)
+
         scores, out_cache = affine_forward(inputs,
                 self.params['W%i'%(self.num_layers)],
                 self.params['b%i'%(self.num_layers)])
@@ -276,11 +287,21 @@ class FullyConnectedNet(object):
         ############################################################################
         loss, dout = softmax_loss(scores, y)
         dx_dout, dw_dout, db_dout = affine_backward(dout, out_cache)
-        grads['W%i'%self.num_layers] = dw_dout
+        grads['W%i'%self.num_layers] = dw_dout +\
+                self.reg * self.params['W%i'%self.num_layers]
         grads['b%i'%self.num_layers] = db_dout
-        squared_weights_sum = 0
+        squared_weights_sum = np.sum(self.params['W%i'%self.num_layers] ** 2)
+
         for i in reversed(range(self.num_layers - 1)):
-            dx_dout, dw, db = affine_relu_backward(dx_dout, caches[i])
+            if self.normalization == 'batchnorm':
+                dx_dout, dw, db, dgamma, dbeta = affine_batchnorm_relu_backward(
+                        dx_dout, caches[i])
+                
+                grads['gamma%i'%(i+1)] = dgamma
+                grads['beta%i'%(i+1)] = dbeta
+            else:
+                dx_dout, dw, db = affine_relu_backward(dx_dout, caches[i])
+
             grads['W%i'%(i+1)] = dw + self.reg * self.params['W%i'%(i+1)]
             grads['b%i'%(i+1)] = db
             squared_weights_sum += np.sum(self.params['W%i'%(i+1)] ** 2)
