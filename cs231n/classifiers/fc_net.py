@@ -249,6 +249,7 @@ class FullyConnectedNet(object):
         ############################################################################
         inputs = X
         caches = []
+        dropout_caches = []
         for i in range(self.num_layers - 1):
             if self.normalization == 'batchnorm':
                 inputs, cache = affine_batchnorm_relu_forward(inputs,
@@ -258,6 +259,11 @@ class FullyConnectedNet(object):
             else:
                 inputs, cache = affine_relu_forward(
                         inputs, self.params['W%i'%(i+1)], self.params['b%i'%(i+1)])
+
+            if self.use_dropout and mode == 'train':
+               inputs, dropout_cache = dropout_forward(inputs, self.dropout_param) 
+               dropout_caches.append(dropout_cache)
+
             caches.append(cache)
 
         scores, out_cache = affine_forward(inputs,
@@ -293,6 +299,9 @@ class FullyConnectedNet(object):
         squared_weights_sum = np.sum(self.params['W%i'%self.num_layers] ** 2)
 
         for i in reversed(range(self.num_layers - 1)):
+            if self.use_dropout:
+                dx_dout = dropout_backward(dx_dout, dropout_caches[i])
+
             if self.normalization == 'batchnorm':
                 dx_dout, dw, db, dgamma, dbeta = affine_batchnorm_relu_backward(
                         dx_dout, caches[i])
