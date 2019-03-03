@@ -392,7 +392,42 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # transformations you could perform, that would enable you to copy over   #
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
-    pass
+    num_units = x.shape[1]
+
+    # Get the mean vector
+    # This is the average of all the features per training example
+    mean = (1.0 / num_units) * np.sum(x, axis=1)
+
+    # X shifted by the mean
+    # Subtract the average of all the features per training example
+    # from each corresponding training example
+    xdiff = x.T - mean
+
+    # Branching out from here
+    # (X - mean)^2
+    xdiff_sq = xdiff ** 2
+
+    # Sum of squared differences (variance)
+    var = (1.0 / num_units) * np.sum(xdiff_sq, axis=0)
+
+    # Square root of the variance (std deviation) + eps (for stability)
+    std = np.sqrt(var + eps)
+
+    # Invert that for division
+    inv_std = 1.0 / std
+
+    # Merging branches
+    # X shifted by mean and divided by std deviation
+    xhat = xdiff * inv_std
+    # We transpose the xhat, so the features are along the 2nd axis,
+    # as they are in the original data
+    xhat = xhat.T
+
+    # Apply beta and gamma
+    out = xhat * gamma + beta
+
+    # Store cache for backprop
+    cache = [x,xhat, mean, var, eps, beta, gamma]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -423,7 +458,73 @@ def layernorm_backward(dout, cache):
     # implementation of batch normalization. The hints to the forward pass    #
     # still apply!                                                            #
     ###########################################################################
-    pass
+    # Broken down into smaller steps
+    #x, xhat, mean, var, eps, beta, gamma = cache 
+    #num_units = x.shape[1]
+    #xdiff = x.T - mean
+    #std = np.sqrt(var + eps)
+
+    #dbeta = np.sum(dout, axis=0)
+    #dgamma = np.sum(dout * xhat, axis=0)
+
+    #dxhat = (gamma * dout).T
+
+    ## Branching out
+    ## Variance branch
+    #dinv_std = np.sum(xdiff * dxhat, axis=0)
+
+    ## Derivative of std with respect to the inverted std
+    #dstd = (- 1.0 / (std ** 2)) * dinv_std
+
+    ## Derivative of the variance with respect to the std
+    #dvar = (1.0 / (2 * std)) * dstd
+
+    ## Derivative of the squared differences with respect to the variance
+    #dxdiff_sq = (np.ones_like(x.T) / num_units) * dvar
+
+    ## Derivative of the differences with respect to their squares
+    #dxdiff_dxdiff_sq = (2 * xdiff) * dxdiff_sq
+    ## End of branch
+
+    ## Derivative of xdiff with respect to xhat
+    #dxdiff_dxhat = (1.0 / std) * dxhat
+
+    ## Merging branches
+    #dxdiff = dxdiff_dxhat + dxdiff_dxdiff_sq
+
+    ## Branching out for calculating the mean
+    #dmean = -1 * np.sum(dxdiff, axis=0)
+
+    ## Merging into x
+    #dx_dxdiff = dxdiff
+
+    #dx_dmean = (np.ones_like(x.T) / num_units) * dmean
+
+    #dx = dx_dxdiff + dx_dmean
+    ## Transpose dx, since all the operations are done on per-feature
+    ## basis, instead of per-example as it is in the original data shape
+    #dx = dx.T
+    # End of the broken down version
+
+    # The batchnorm_backward_alt corresponding version
+    x, xhat, mean, var, eps, beta, gamma = cache 
+    num_units = x.shape[1]
+    xdiff = x.T - mean
+
+    dxhat_dout = (dout * gamma).T
+
+    dvar_dout = np.sum(dxhat_dout * xdiff * (-.5 * ((var + eps) ** -1.5)),
+            axis=0)
+
+    dmean_dout = np.sum(dxhat_dout * (-1 / (np.sqrt(var + eps))), axis=0) +\
+            dvar_dout * (np.sum(-2 * xdiff, axis=0) / num_units)
+
+    dx = (dxhat_dout * (1 / (np.sqrt(var + eps))) +\
+            dvar_dout * (2 * xdiff / num_units) +\
+            dmean_dout * (1 / num_units)).T
+
+    dgamma = np.sum(dout * xhat, axis=0)
+    dbeta = np.sum(dout, axis=0)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
