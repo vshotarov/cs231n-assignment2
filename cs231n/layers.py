@@ -647,7 +647,28 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    N, C, H, W = x.shape
+    HH, WW = w.shape[-2:]
+    F = b.shape[0]
+
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+
+    out_H = int(1 + (H + 2 * pad - HH) / stride)
+    out_W = int(1 + (W + 2 * pad - WW) / stride)
+
+    padded_x = np.pad(x, [(0,0), (0,0), (pad,pad), (pad,pad)], 'constant')
+
+    out = np.zeros((N, F, out_H, out_W))
+    for i in range(N):
+        for f in range(F):
+            for r in range(out_H):
+                for c in range(out_W):
+                        rr, cc = r * stride, c * stride
+                        local_x = padded_x[i][:,rr:rr+HH,cc:cc+WW]
+                        local_w = w[f]
+                        out[i][f][r][c] = np.sum(local_x * local_w) + b[f]
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -672,7 +693,33 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    HH, WW = w.shape[-2:]
+    F = b.shape[0]
+
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+
+    out_H = int(1 + (H + 2 * pad - HH) / stride)
+    out_W = int(1 + (W + 2 * pad - WW) / stride)
+
+    padded_x = np.pad(x, [(0,0), (0,0), (pad,pad), (pad,pad)], 'constant')
+
+    dw = np.zeros_like(w)
+    dx = np.zeros_like(padded_x)
+    db = np.zeros_like(b)
+    for i in range(N):
+        for f in range(F):
+            for r in range(out_H):
+                for c in range(out_W):
+                    rr, cc = r * stride, c * stride
+                    local_x = padded_x[i][:,rr:rr+HH,cc:cc+WW]
+                    dw[f] += local_x * dout[i][f][r][c]
+                    dx[i][:,rr:rr+HH,cc:cc+WW] += w[f] * dout[i][f][r][c]
+                    db[f] += dout[i][f][r][c]
+    dx = dx[:,:,pad:-pad,pad:-pad]
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
